@@ -1,0 +1,201 @@
+test-app:
+  name: test-app
+  team: test-team
+  env: dev
+  replicas: 2
+  maxSurge: 1
+  maxUnavailable: 1
+
+  deployment:
+    enabled: true
+    # Default deployment annotations
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/path: "/_metrics"
+
+  PodDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+  HorizontalPodAutoscaler:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 3
+    averageUtilization: 70
+
+  image:
+    name: harbor.k8s-sandbox.org/updater-test/nginx
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  terminationGracePeriodSeconds: 30
+
+  securityContext:
+    runAsUser: 33
+    runAsGroup: 33
+    fsGroup: 33
+    readOnlyRootFilesystem: true
+
+  serviceAccount:
+    name: team-test-sa
+
+  resources:
+    limits:
+      cpu: 100m
+      memory: 56Mi
+    requests:
+      cpu: 100m
+      memory: 56Mi
+
+  startupProbe:
+    httpGet:
+      path: /healthz
+      port: 8080
+    failureThreshold: 2
+    periodSeconds: 5
+  readinessProbe:
+    httpGet:
+      path: /healthz
+      port: 8080
+    failureThreshold: 2
+    periodSeconds: 5
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 8080
+    failureThreshold: 2
+    periodSeconds: 5
+
+  service:
+    # Whether service is enabled or disabled
+    enabled: true
+    # Type of service, generally don't need to change
+    type:
+      ClusterIP
+      # Service specific annotations
+    annotations:
+      lido.fi/maintainer: Full name test
+      prometheus.io/probe: "true"
+      prometheus.io/path: /_livenessProbe
+    ports:
+      - name: http
+        port: 8080
+        targetPort: 8080
+      - name: metrics
+        port: 8090
+        targetPort: 8090
+
+  servicemonitor:
+    endpoints:
+      - interval: 15s
+        path: /metrics
+        port: metrics
+        scheme: http
+
+  pvc:
+    enabled: true
+
+  pvcs:
+    - name: k8s-hello-shared
+      accessModes:
+        - ReadWriteMany
+      size: 10Mi
+  volumes:
+    - name: k8s-hello-lib
+      emptyDir:
+        sizeLimit: 100Mi
+    - name: k8s-hello-cache
+      emptyDir:
+        sizeLimit: 100Mi
+    - name: k8s-hello-run
+      emptyDir:
+        sizeLimit: 100Mi
+    - name: k8s-hello-tmp
+      emptyDir:
+        sizeLimit: 100Mi
+    - name: k8s-hello-shared
+      persistentVolumeClaim:
+        claimName: k8s-hello-shared
+  # Ingress configuration enable if you need to expose the service to the outside world
+  ingress:
+    enabled: true
+    ingressClassName: nginx-internal
+    rules:
+      - host: test.iaac-ramiz.k8s-sandbox.org
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - hosts:
+          - test.iaac-ramiz.k8s-sandbox.org
+
+  containers:
+    - name: k8s-hello
+      image:
+        name: harbor.iaac-ramiz.k8s-sandbox.org/team-test/k8s-hello
+        tag: dev
+      imagePullPolicy: Always
+      startupProbe:
+        httpGet:
+          path: /healthz
+          port: 8080
+        failureThreshold: 2
+        periodSeconds: 5
+      readinessProbe:
+        httpGet:
+          path: /healthz
+          port: 8080
+        failureThreshold: 2
+        periodSeconds: 5
+      livenessProbe:
+        httpGet:
+          path: /healthz
+          port: 8080
+      volumeMounts:
+        - name: k8s-hello-lib
+          mountPath: /var/lib/nginx
+        - name: k8s-hello-cache
+          mountPath: /var/cache/nginx
+        - name: k8s-hello-run
+          mountPath: /run
+        - name: k8s-hello-tmp
+          mountPath: /tmp
+        - name: k8s-hello-shared
+          mountPath: /tmp/shared
+
+  cronjobs:
+    - name: k8s-hello-cronjob
+      schedule: "*/5 * * * *"
+      restartPolicy: Never
+      containers:
+        - name: k8s-hello-cronjob
+          image:
+            name: busybox
+            tag: "1.37.0"
+          command: ["/bin/sh", "-c"]
+          args:
+            - date; echo "Hello from k8s-hello-cronjob"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+              ephemeral-storage: 64Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+              ephemeral-storage: 128Mi
+
+  openbao:
+    enabled: false
+    annotations:
+      vault.hashicorp.com/agent-inject: "true"
+      vault.hashicorp.com/role: "team-test-ro"
+      vault.hashicorp.com/agent-inject-secret-app: "secret/data/team-test/k8s-hello"
+      vault.hashicorp.com/agent-pre-populate: "true"
+      vault.hashicorp.com/template-static-secret-render-interval: "30s"
+      vault.hashicorp.com/agent-inject-template-app: |
+        {{- with secret "secret/data/team-test/k8s-hello" -}}
+        {{- range $k, $v := .Data.data -}}
+        export {{ $k }}="{{ $v }}"
+        {{ end -}}
+        {{- end -}}

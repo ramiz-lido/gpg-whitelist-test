@@ -1,0 +1,10 @@
+apiVersion: v2
+name: test-app
+version: 1.0.0
+type: application
+dependencies:
+  - name: k8s-helm-charts-template
+    alias: test-app
+    version: 1.5.6
+    repository: "oci://ghcr.io/lidofinance/helm-charts"
+    # repository: file://../template/
