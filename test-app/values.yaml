@@ -121,13 +121,13 @@ test-app:
     enabled: true
     ingressClassName: nginx-internal
     rules:
-      - host: test2.iaac-ramiz.k8s-sandbox.org
+      - host: test3.iaac-ramiz.k8s-sandbox.org
         paths:
           - path: /
             pathType: Prefix
     tls:
       - hosts:
-          - test2.iaac-ramiz.k8s-sandbox.org
+          - test3.iaac-ramiz.k8s-sandbox.org
 
   containers:
     - name: k8s-hello
